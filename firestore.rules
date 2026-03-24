@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' || 
+        (request.auth.token.email == "inpplba@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+    
+    function isSupervisor() {
+      return isAuthenticated() && getUserData().role == 'supervisor';
+    }
+    
+    function isSeller() {
+      return isAuthenticated() && getUserData().role == 'seller';
+    }
+    
+    function getUserBranchId() {
+      return getUserData().branchId;
+    }
+    
+    function isSameBranch(branchId) {
+      return getUserBranchId() == branchId;
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string && 
+             request.resource.data[field].size() >= minLen && 
+             request.resource.data[field].size() <= maxLen;
+    }
+    
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidUser() {
+      return hasOnlyAllowedFields(['email', 'name', 'role', 'branchId', 'createdAt']) &&
+             isValidString('email', 5, 100) &&
+             isValidString('name', 2, 100) &&
+             request.resource.data.role in ['admin', 'supervisor', 'seller'] &&
+             (request.resource.data.role == 'admin' || isValidString('branchId', 1, 50)) &&
+             request.resource.data.createdAt is string;
+    }
+    
+    function isValidBranch() {
+      return hasOnlyAllowedFields(['name', 'location', 'createdAt']) &&
+             isValidString('name', 2, 100) &&
+             isValidString('location', 2, 200) &&
+             request.resource.data.createdAt is string;
+    }
+    
+    function isValidInventoryItem() {
+      return hasOnlyAllowedFields(['branchId', 'type', 'name', 'quantity', 'unit', 'price', 'createdAt', 'updatedAt']) &&
+             isValidString('branchId', 1, 50) &&
+             request.resource.data.type in ['raw_material', 'finished_product'] &&
+             isValidString('name', 2, 100) &&
+             request.resource.data.quantity is number && request.resource.data.quantity >= 0 &&
+             isValidString('unit', 1, 20) &&
+             request.resource.data.price is number && request.resource.data.price >= 0 &&
+             request.resource.data.createdAt is string &&
+             request.resource.data.updatedAt is string;
+    }
+    
+    function isValidSale() {
+      return hasOnlyAllowedFields(['branchId', 'sellerId', 'items', 'totalAmount', 'date', 'createdAt']) &&
+             isValidString('branchId', 1, 50) &&
+             isValidString('sellerId', 1, 50) &&
+             request.resource.data.items is list && request.resource.data.items.size() > 0 && request.resource.data.items.size() <= 100 &&
+             request.resource.data.totalAmount is number && request.resource.data.totalAmount >= 0 &&
+             request.resource.data.date is string &&
+             request.resource.data.createdAt is string;
+    }
+    
+    function isValidExpense() {
+      return hasOnlyAllowedFields(['branchId', 'userId', 'category', 'amount', 'description', 'date', 'createdAt']) &&
+             isValidString('branchId', 1, 50) &&
+             isValidString('userId', 1, 50) &&
+             request.resource.data.category in ['rent', 'electricity', 'transport', 'supplies', 'other'] &&
+             request.resource.data.amount is number && request.resource.data.amount > 0 &&
+             isValidString('description', 0, 500) &&
+             request.resource.data.date is string &&
+             request.resource.data.createdAt is string;
+    }
+    
+    function isValidDeposit() {
+      return hasOnlyAllowedFields(['branchId', 'submittedBy', 'validatedBy', 'amount', 'status', 'date', 'createdAt']) &&
+             isValidString('branchId', 1, 50) &&
+             isValidString('submittedBy', 1, 50) &&
+             (request.resource.data.validatedBy == null || isValidString('validatedBy', 1, 50)) &&
+             request.resource.data.amount is number && request.resource.data.amount > 0 &&
+             request.resource.data.status in ['pending', 'validated', 'rejected'] &&
+             request.resource.data.date is string &&
+             request.resource.data.createdAt is string;
+    }
+    
+    // ===============================================================
+    // Collections
+    // ===============================================================
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId || isSupervisor());
+      allow create: if isAdmin() && isValidUser();
+      allow update: if isAdmin() && isValidUser();
+      allow delete: if isAdmin();
+    }
+    
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidBranch();
+      allow update: if isAdmin() && isValidBranch();
+      allow delete: if isAdmin();
+    }
+    
+    match /inventory/{itemId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSameBranch(resource.data.branchId));
+      allow create: if isAuthenticated() && (isAdmin() || (isSupervisor() && isSameBranch(request.resource.data.branchId))) && isValidInventoryItem();
+      allow update: if isAuthenticated() && (isAdmin() || ((isSupervisor() || isSeller()) && isSameBranch(resource.data.branchId))) && isValidInventoryItem();
+      allow delete: if isAdmin();
+    }
+    
+    match /sales/{saleId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSameBranch(resource.data.branchId));
+      allow create: if isAuthenticated() && (isAdmin() || (isSeller() && isSameBranch(request.resource.data.branchId) && request.resource.data.sellerId == request.auth.uid)) && isValidSale();
+      allow update: if isAdmin() && isValidSale();
+      allow delete: if isAdmin();
+    }
+    
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSameBranch(resource.data.branchId));
+      allow create: if isAuthenticated() && (isAdmin() || ((isSeller() || isSupervisor()) && isSameBranch(request.resource.data.branchId) && request.resource.data.userId == request.auth.uid)) && isValidExpense();
+      allow update: if isAdmin() && isValidExpense();
+      allow delete: if isAdmin();
+    }
+    
+    match /deposits/{depositId} {
+      allow read: if isAuthenticated() && (isAdmin() || isSameBranch(resource.data.branchId));
+      allow create: if isAuthenticated() && (isAdmin() || (isSeller() && isSameBranch(request.resource.data.branchId) && request.resource.data.submittedBy == request.auth.uid && request.resource.data.status == 'pending')) && isValidDeposit();
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isSupervisor() && isSameBranch(resource.data.branchId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'validatedBy']) && request.resource.data.validatedBy == request.auth.uid)
+      ) && isValidDeposit();
+      allow delete: if isAdmin();
+    }
+  }
+}

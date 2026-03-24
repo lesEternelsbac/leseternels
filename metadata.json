@@ -1,0 +1,5 @@
+{
+  "name": "Fashion ERP - Gestion de Stocks et Ventes",
+  "description": "Application de gestion centralisée pour entreprise de mode (multi-succursales) avec gestion des stocks, ventes, dépenses et dépôts.",
+  "requestFramePermissions": []
+}

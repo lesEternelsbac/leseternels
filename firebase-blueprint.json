@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Utilisateur de l'application avec son rôle RBAC",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "supervisor", "seller"] },
+        "branchId": { "type": "string", "description": "ID de la succursale (vide si admin global)" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "role", "createdAt"]
+    },
+    "Branch": {
+      "title": "Branch",
+      "description": "Succursale de l'entreprise",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "location", "createdAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Article en stock (matière première ou produit fini)",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string" },
+        "type": { "type": "string", "enum": ["raw_material", "finished_product"] },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branchId", "type", "name", "quantity", "unit", "price", "createdAt", "updatedAt"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Vente enregistrée par un vendeur",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "inventoryId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" }
+            },
+            "required": ["inventoryId", "name", "quantity", "price"]
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branchId", "sellerId", "items", "totalAmount", "date", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Dépense locale d'une succursale",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string" },
+        "userId": { "type": "string" },
+        "category": { "type": "string", "enum": ["rent", "electricity", "transport", "supplies", "other"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branchId", "userId", "category", "amount", "description", "date", "createdAt"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "Dépôt de fonds journalier d'une succursale vers le siège",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string" },
+        "submittedBy": { "type": "string" },
+        "validatedBy": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "validated", "rejected"] },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branchId", "submittedBy", "amount", "status", "date", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Comptes utilisateurs avec rôles"
+    },
+    "/branches/{branchId}": {
+      "schema": { "$ref": "#/entities/Branch" },
+      "description": "Liste des succursales"
+    },
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Stock global et par succursale"
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/Sale" },
+      "description": "Historique des ventes"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Historique des dépenses"
+    },
+    "/deposits/{depositId}": {
+      "schema": { "$ref": "#/entities/Deposit" },
+      "description": "Historique des dépôts de fonds"
+    }
+  }
+}
